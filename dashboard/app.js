@@ -618,6 +618,14 @@ function initMonthlyChart() {
     },
     options: {
       ...getChartOptions('Energy (MWh)', 'Month'),
+      interaction: {
+        mode: 'nearest',
+        intersect: true
+      },
+      hover: {
+        mode: 'nearest',
+        intersect: true
+      },
       plugins: {
         ...getChartOptions('Energy (MWh)', 'Month').plugins,
         tooltip: {
@@ -640,6 +648,16 @@ function initMonthlyChart() {
       }
     }
   });
+
+  // Clear hover state when leaving the canvas to avoid sticky points.
+  ctx.canvas.addEventListener('mouseleave', () => {
+    if (!monthlyChart) return;
+    monthlyChart.setActiveElements([]);
+    if (monthlyChart.tooltip) {
+      monthlyChart.tooltip.setActiveElements([], { x: 0, y: 0 });
+    }
+    monthlyChart.update();
+  });
 }
 
 function updateMonthlyChart(utility) {
@@ -658,7 +676,11 @@ function updateMonthlyChart(utility) {
   monthlyChart.data.datasets[0].borderColor = colors[utility].border;
   monthlyChart.data.datasets[0].backgroundColor = colors[utility].bg;
   monthlyChart.data.datasets[0].pointBackgroundColor = colors[utility].border;
-  monthlyChart.update('active');
+  monthlyChart.setActiveElements([]);
+  if (monthlyChart.tooltip) {
+    monthlyChart.tooltip.setActiveElements([], { x: 0, y: 0 });
+  }
+  monthlyChart.update();
 }
 
 // ===== WEATHER SCATTER =====
