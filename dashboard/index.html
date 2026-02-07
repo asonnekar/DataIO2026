@@ -31,7 +31,6 @@
         </div>
 
         <div class="nav-section">
-            <div class="nav-label">Navigation</div>
             <a href="#overview" class="nav-item active" data-section="overview">
                 <span class="nav-icon">📊</span> Overview
             </a>
@@ -144,16 +143,16 @@
             <div class="card-grid cols-2">
                 <div class="card">
                     <div class="card-header">
-                        <h3>📍 Campus Building Map</h3>
-                        <span class="badge">Click markers for details</span>
+                        <h3>📍 Campus EUI Map</h3>
+                        <span class="badge">EUI = Energy Use Intensity (kWh per sqft per year)</span>
                     </div>
                     <div class="map-container">
                         <div id="campus-map"></div>
                     </div>
                     <div class="map-legend">
-                        <span><span class="dot cyan"></span> Low Usage</span>
-                        <span><span class="dot yellow"></span> Medium</span>
-                        <span><span class="dot orange"></span> High Usage</span>
+                        <span><span class="dot" style="background: #1ab3d5;"></span> Low EUI (0-4.5)</span>
+                        <span><span class="dot" style="background: #5cfe69;"></span> Medium (4.5-7.5)</span>
+                        <span><span class="dot" style="background: #e31a1c;"></span> High EUI (7.5+)</span>
                     </div>
                 </div>
 

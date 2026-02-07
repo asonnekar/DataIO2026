@@ -1117,6 +1117,10 @@ body::before {
     font-family: 'Space Mono', monospace !important;
 }
 
+.leaflet-control-attribution {
+    display: none !important;
+}
+
 .leaflet-popup-content-wrapper {
     background: var(--bg-card) !important;
     color: var(--text-primary) !important;

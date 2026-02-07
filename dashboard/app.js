@@ -253,85 +253,161 @@ function initializeAllCharts() {
 }
 
 // ===== MAP =====
-function initMap() {
-  const map = L.map('campus-map', { zoomControl: true }).setView([40.0067, -83.0305], 15);
-  
+async function initMap() {
+  const map = L.map('campus-map', { zoomControl: true }).setView([40.00160797506397, -83.02065110905887], 15);
+
+  // Use dark CartoDB tiles to match the OSU EUI map
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19
+    maxZoom: 20,
+    attribution: ''
   }).addTo(map);
-  
-  // Add sample buildings
-  const sampleBuildings = [
-    { name: "Wexner Medical Center", lat: 39.9949, lng: -83.0160, energy: 25000000, eui: 42.5 },
-    { name: "Ohio Stadium", lat: 40.0017, lng: -83.0197, energy: 18500000, eui: 28.3 },
-    { name: "Thompson Library", lat: 40.0027, lng: -83.0148, energy: 12800000, eui: 35.2 },
-    { name: "RPAC", lat: 40.0093, lng: -83.0183, energy: 11200000, eui: 38.7 },
-    { name: "Ohio Union", lat: 40.0048, lng: -83.0108, energy: 9800000, eui: 32.1 },
-    { name: "Knowlton Hall", lat: 40.0020, lng: -83.0157, energy: 6500000, eui: 29.4 },
-    { name: "Physics Research", lat: 40.0019, lng: -83.0278, energy: 7600000, eui: 41.2 },
-    { name: "Dreese Labs", lat: 40.0016, lng: -83.0157, energy: 5200000, eui: 33.8 },
-    { name: "Caldwell Lab", lat: 40.0026, lng: -83.0165, energy: 4100000, eui: 28.9 },
-    { name: "Scott Lab", lat: 40.0023, lng: -83.0168, energy: 3800000, eui: 31.2 }
-  ];
-  
-  // Calculate percentiles for better context
-  const allEnergies = sampleBuildings.map(b => b.energy);
-  const minEnergy = Math.min(...allEnergies);
-  const maxEnergy = Math.max(...allEnergies);
-  const avgEnergy = allEnergies.reduce((a, b) => a + b, 0) / allEnergies.length;
 
-  sampleBuildings.forEach(b => {
-    const intensity = Math.min(1, b.energy / 25000000);
-    const color = getHeatColor(intensity);
-    const percentile = ((b.energy - minEnergy) / (maxEnergy - minEnergy) * 100).toFixed(0);
-    const vsAvg = ((b.energy / avgEnergy - 1) * 100).toFixed(0);
-    const vsAvgSign = vsAvg >= 0 ? '+' : '';
+  // Load real OSU building data
+  let buildingData;
+  try {
+    const response = await fetch('building_markers.json');
+    buildingData = await response.json();
+  } catch (error) {
+    console.error('Could not load building data:', error);
+    return;
+  }
 
-    // Categorize EUI
-    let euiCategory = 'Efficient';
-    let euiColor = '#00ff88';
-    if (b.eui > 40) {
-      euiCategory = 'High Consumption';
-      euiColor = '#ff6b35';
-    } else if (b.eui > 30) {
-      euiCategory = 'Moderate';
-      euiColor = '#fbbf24';
+  const buildings = buildingData.buildings;
+
+  // Calculate EUI statistics for categorization
+  const euiValues = buildings.map(b => b.eui);
+  const maxEui = Math.max(...euiValues);
+  const minEui = Math.min(...euiValues);
+
+  // Add all OSU buildings to the map
+  buildings.forEach(b => {
+    // Determine marker style based on EUI and whether it's the highest
+    const markerOptions = {
+      radius: b.radius,
+      fillColor: b.fillColor,
+      fillOpacity: 0.6,
+      weight: b.weight,
+      opacity: 1.0
+    };
+
+    // Special styling for the highest EUI building
+    if (b.is_highest) {
+      markerOptions.color = '#FFFFFF';
+      markerOptions.weight = 3;
+      markerOptions.fillOpacity = 0.9;
+    } else if (b.strokeColor) {
+      markerOptions.color = b.strokeColor;
+    } else {
+      markerOptions.color = null;
     }
 
-    L.circleMarker([b.lat, b.lng], {
-      radius: 8 + intensity * 12,
-      fillColor: color,
-      color: '#fff',
-      weight: 2,
-      opacity: 0.9,
-      fillOpacity: 0.75
-    }).bindPopup(`
+    // Categorize EUI based on the actual marker color
+    let euiCategory = 'Low';
+    const fillColorLower = b.fillColor.toLowerCase();
+
+    if (fillColorLower.includes('#e31a1c') || fillColorLower.includes('red')) {
+      euiCategory = 'High';
+    } else if (fillColorLower.includes('#5cfe69') || fillColorLower.includes('green')) {
+      euiCategory = 'Medium';
+    } else {
+      euiCategory = 'Low';
+    }
+
+    // Use the marker's actual color for EUI value display
+    const euiColor = b.fillColor;
+
+    // Create circle marker
+    const marker = L.circleMarker([b.lat, b.lng], markerOptions);
+
+    // Create popup with building information
+    const popupContent = `
       <div style="font-family: 'Space Mono', monospace; min-width: 220px;">
-        <strong style="color: #00d4ff; font-size: 14px;">${b.name}</strong><br>
-        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,212,255,0.3);">
-          <div style="margin: 4px 0;">
-            <span style="color: #8899a6;">Annual Energy:</span><br>
-            <strong style="color: #fff; font-size: 16px;">${formatNumber(b.energy / 1000)} MWh</strong>
-          </div>
-          <div style="margin: 4px 0;">
+        <strong style="color: ${b.fillColor}; font-size: 14px;">${b.name}</strong>
+        <div style="color: #8899a6; font-size: 11px; margin-top: 2px;">ID: ${b.id}</div>
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${b.fillColor}40;">
+          <div style="margin: 6px 0;">
             <span style="color: #8899a6;">EUI:</span>
-            <strong style="color: ${euiColor};">${b.eui.toFixed(1)} kWh/sqft</strong>
-            <span style="color: #8899a6; font-size: 11px;"> (${euiCategory})</span>
+            <strong style="color: ${euiColor}; font-size: 16px; margin-left: 8px;">${b.eui.toFixed(1)} kWh/sqft/yr</strong>
+            ${b.is_highest ? '<br><span style="color: #e31a1c; font-weight: bold; font-size: 11px;">⚠️ HIGHEST</span>' : ''}
+            <span style="color: #8899a6; font-size: 11px; display: block; margin-top: 2px;">(${euiCategory} Usage)</span>
           </div>
-          <div style="margin: 4px 0; font-size: 11px; color: #8899a6;">
-            Usage Rank: ${percentile}th percentile<br>
-            vs Campus Avg: ${vsAvgSign}${vsAvg}%
+          <div style="margin: 6px 0;">
+            <span style="color: #8899a6;">Area:</span>
+            <strong style="color: #fff; margin-left: 8px;">${formatNumber(b.area)} sqft</strong>
           </div>
         </div>
       </div>
-    `).addTo(map);
+    `;
+
+    const popup = L.popup({
+      className: 'custom-popup'
+    }).setContent(popupContent);
+
+    marker.bindPopup(popup);
+
+    // Set popup border color to match marker when opened
+    marker.on('popupopen', (e) => {
+      const popupElement = e.popup._container;
+      const wrapper = popupElement.querySelector('.leaflet-popup-content-wrapper');
+      const tip = popupElement.querySelector('.leaflet-popup-tip');
+      if (wrapper) {
+        wrapper.style.borderColor = b.fillColor;
+        wrapper.style.borderWidth = '2px';
+      }
+      if (tip) {
+        tip.style.backgroundColor = 'rgba(17, 24, 32, 0.9)';
+        tip.style.borderTopColor = b.fillColor;
+        tip.style.borderLeftColor = b.fillColor;
+      }
+    });
+    marker.addTo(map);
   });
+
+  // Add legend to the map
+  addMapLegend(map);
 }
 
-function getHeatColor(intensity) {
-  if (intensity < 0.4) return '#00d4ff';
-  if (intensity < 0.7) return '#fbbf24';
-  return '#ff6b35';
+function addMapLegend(map) {
+  const legend = L.control({ position: 'bottomleft' });
+
+  legend.onAdd = function() {
+    const div = L.DomUtil.create('div', 'map-legend-overlay');
+    div.style.cssText = `
+      background-color: rgba(17, 24, 32, 0.95);
+      border: 2px solid rgba(0, 212, 255, 0.4);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      color: #f0f4f8;
+      min-width: 200px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    `;
+
+    div.innerHTML = `
+      <p style="margin: 0 0 8px 0; font-weight: bold; color: #00d4ff; border-bottom: 1px solid rgba(0, 212, 255, 0.3); padding-bottom: 6px;">EUI (kWh/sqft/yr)</p>
+      <div style="display: flex; align-items: center; margin: 6px 0;">
+        <span style="background-color: #1ab3d5; width: 24px; height: 12px; display: inline-block; margin-right: 8px; border-radius: 2px;"></span>
+        <span>Low (0-4.5)</span>
+      </div>
+      <div style="display: flex; align-items: center; margin: 6px 0;">
+        <span style="background-color: #5cfe69; width: 24px; height: 12px; display: inline-block; margin-right: 8px; border-radius: 2px;"></span>
+        <span>Medium (4.5-7.5)</span>
+      </div>
+      <div style="display: flex; align-items: center; margin: 6px 0;">
+        <span style="background-color: #e31a1c; width: 24px; height: 12px; display: inline-block; margin-right: 8px; border-radius: 2px;"></span>
+        <span>High (7.5+)</span>
+      </div>
+      <div style="display: flex; align-items: center; margin: 6px 0;">
+        <span style="background-color: #e31a1c; width: 24px; height: 12px; display: inline-block; margin-right: 8px; border: 2px solid #fff; border-radius: 2px;"></span>
+        <span style="font-size: 10px;">Highest (433k+)</span>
+      </div>
+    `;
+
+    return div;
+  };
+
+  legend.addTo(map);
 }
 
 // ===== MONTHLY CHART =====
