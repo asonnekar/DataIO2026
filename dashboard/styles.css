@@ -480,6 +480,19 @@ body::before {
     position: relative;
 }
 
+.pie-container {
+    position: relative;
+}
+
+/* Force Chart.js legend text to be light colored */
+.pie-container canvas {
+    color: #f0f4f8 !important;
+}
+
+#utility-pie-chart + div {
+    color: #f0f4f8 !important;
+}
+
 .chart-tabs {
     display: flex;
     gap: 4px;
@@ -702,9 +715,16 @@ body::before {
 }
 
 .heatmap-gradient {
-    width: 150px;
+    width: 200px;
     height: 10px;
-    background: linear-gradient(90deg, #0a2540, #00d4ff, #ff6b35);
+    background: linear-gradient(90deg,
+        hsl(200, 100%, 35%),   /* Dark blue */
+        hsl(180, 100%, 50%),   /* Cyan */
+        hsl(120, 100%, 50%),   /* Green */
+        hsl(60, 100%, 55%),    /* Yellow */
+        hsl(30, 100%, 55%),    /* Orange */
+        hsl(0, 100%, 55%)      /* Red */
+    );
     border-radius: 5px;
 }
 

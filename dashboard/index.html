@@ -99,63 +99,31 @@
                 </div>
             </div>
 
-            <!-- Utility Breakdown -->
-            <div class="card-grid cols-4">
-                <div class="metric-card">
-                    <div class="metric-icon electricity">🔌</div>
-                    <div class="metric-value">68.7 GWh</div>
-                    <div class="metric-label">Electricity</div>
-                    <div class="metric-bar">
-                        <div class="metric-fill" style="width: 100%; background: var(--accent-cyan);"></div>
-                    </div>
-                    <div class="metric-percent">48% of total</div>
+            <!-- Large Map Card - Full Width -->
+            <div class="card" style="height: 600px;">
+                <div class="card-header">
+                    <h3>📍 Campus EUI Map</h3>
+                    <span class="badge">EUI = Energy Use Intensity (kWh per sqft per year)</span>
                 </div>
-                <div class="metric-card">
-                    <div class="metric-icon heat">🔥</div>
-                    <div class="metric-value">23.5 GWh</div>
-                    <div class="metric-label">Heating</div>
-                    <div class="metric-bar">
-                        <div class="metric-fill" style="width: 65%; background: var(--accent-orange);"></div>
-                    </div>
-                    <div class="metric-percent">16% of total</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-icon cool">❄️</div>
-                    <div class="metric-value">18.2 GWh</div>
-                    <div class="metric-label">Cooling</div>
-                    <div class="metric-bar">
-                        <div class="metric-fill" style="width: 52%; background: var(--accent-green);"></div>
-                    </div>
-                    <div class="metric-percent">13% of total</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-icon gas">⛽</div>
-                    <div class="metric-value">12.6 GWh</div>
-                    <div class="metric-label">Natural Gas</div>
-                    <div class="metric-bar">
-                        <div class="metric-fill" style="width: 38%; background: var(--accent-purple);"></div>
-                    </div>
-                    <div class="metric-percent">9% of total</div>
+                <div class="map-container" style="height: calc(100% - 60px);">
+                    <div id="campus-map"></div>
                 </div>
             </div>
 
-            <!-- Map + Chart Row -->
+            <!-- Utility Distribution and Monthly Chart - Side by Side -->
             <div class="card-grid cols-2">
+                <!-- Utility Distribution Pie Chart -->
                 <div class="card">
                     <div class="card-header">
-                        <h3>📍 Campus EUI Map</h3>
-                        <span class="badge">EUI = Energy Use Intensity (kWh per sqft per year)</span>
+                        <h3>⚡ Utility Distribution</h3>
+                        <span class="badge">Total Campus Energy Mix</span>
                     </div>
-                    <div class="map-container">
-                        <div id="campus-map"></div>
-                    </div>
-                    <div class="map-legend">
-                        <span><span class="dot" style="background: #1ab3d5;"></span> Low EUI (0-4.5)</span>
-                        <span><span class="dot" style="background: #5cfe69;"></span> Medium (4.5-7.5)</span>
-                        <span><span class="dot" style="background: #e31a1c;"></span> High EUI (7.5+)</span>
+                    <div class="pie-container" style="height: 400px; padding: 20px;">
+                        <canvas id="utility-pie-chart"></canvas>
                     </div>
                 </div>
 
+                <!-- Monthly Chart -->
                 <div class="card">
                     <div class="card-header">
                         <h3>📈 Monthly Consumption Trends</h3>
@@ -165,7 +133,7 @@
                             <button class="chart-tab" data-utility="COOLING">Cooling</button>
                         </div>
                     </div>
-                    <div class="chart-container">
+                    <div class="chart-container" style="height: 400px;">
                         <canvas id="monthly-chart"></canvas>
                     </div>
                 </div>

@@ -245,11 +245,141 @@ function generateHeatmapData() {
 
 function initializeAllCharts() {
   initMap();
+  initUtilityPieChart();
   initMonthlyChart();
   initHeatmap();
   initWeatherScatter();
   initHourlyChart();
   initEUIChart();
+}
+
+// ===== UTILITY PIE CHART =====
+function initUtilityPieChart() {
+  const ctx = document.getElementById('utility-pie-chart')?.getContext('2d');
+  if (!ctx) return;
+
+  const colors = {
+    electricity: { bg: 'rgba(0, 212, 255, 0.8)', border: 'rgba(0, 212, 255, 1)' },
+    heating: { bg: 'rgba(255, 107, 53, 0.8)', border: 'rgba(255, 107, 53, 1)' },
+    cooling: { bg: 'rgba(0, 255, 136, 0.8)', border: 'rgba(0, 255, 136, 1)' },
+    gas: { bg: 'rgba(168, 85, 247, 0.8)', border: 'rgba(168, 85, 247, 1)' }
+  };
+
+  const data = {
+    labels: ['Electricity', 'Heating', 'Cooling', 'Natural Gas'],
+    datasets: [{
+      data: [68.7, 23.5, 18.2, 12.6],
+      backgroundColor: [
+        colors.electricity.bg,
+        colors.heating.bg,
+        colors.cooling.bg,
+        colors.gas.bg
+      ],
+      borderColor: [
+        colors.electricity.border,
+        colors.heating.border,
+        colors.cooling.border,
+        colors.gas.border
+      ],
+      borderWidth: 3,
+      hoverOffset: 15,
+      hoverBorderWidth: 4
+    }]
+  };
+
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: data,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          align: 'center',
+          labels: {
+            color: '#f0f4f8',
+            font: {
+              family: 'Space Mono',
+              size: 12,
+              weight: '500'
+            },
+            padding: 15,
+            usePointStyle: true,
+            pointStyle: 'circle',
+            generateLabels: (chart) => {
+              const data = chart.data;
+              const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+              return data.labels.map((label, i) => {
+                const value = data.datasets[0].data[i];
+                const percentage = ((value / total) * 100).toFixed(1);
+                return {
+                  text: `${label}: ${value} GWh (${percentage}%)`,
+                  fillStyle: data.datasets[0].backgroundColor[i],
+                  strokeStyle: data.datasets[0].borderColor[i],
+                  lineWidth: 2,
+                  hidden: false,
+                  index: i,
+                  fontColor: '#f0f4f8' // Explicit font color for each label
+                };
+              });
+            }
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(17, 24, 32, 0.98)',
+          bodyColor: '#f0f4f8',
+          borderWidth: 2,
+          padding: 16,
+          displayColors: true,
+          boxWidth: 15,
+          boxHeight: 15,
+          usePointStyle: true,
+          callbacks: {
+            title: (context) => {
+              return context[0].label;
+            },
+            label: (context) => {
+              const value = context.parsed;
+              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+              const percentage = ((value / total) * 100).toFixed(1);
+              return [
+                `Energy: ${value} GWh`,
+                `Percentage: ${percentage}%`,
+                `Annual Cost: ~$${(value * 100).toFixed(0)}K`
+              ];
+            },
+            // Store the slice color for titleColor and borderColor
+            beforeTitle: (context) => {
+              const idx = context[0].dataIndex;
+              const sliceColor = context[0].chart.data.datasets[0].borderColor[idx];
+              context[0].chart.tooltip._sliceColor = sliceColor;
+            },
+            titleColor: (context) => {
+              return context.chart.tooltip._sliceColor || '#00d4ff';
+            }
+          },
+          // Dynamic border color matching the slice
+          borderColor: (context) => {
+            const tooltip = context.chart.tooltip;
+            if (tooltip && tooltip._sliceColor) {
+              return tooltip._sliceColor;
+            }
+            return 'rgba(0, 212, 255, 0.5)';
+          }
+        }
+      },
+      cutout: '65%',
+      radius: '90%',
+      animation: {
+        animateRotate: true,
+        animateScale: true,
+        duration: 1500,
+        easing: 'easeInOutQuart'
+      }
+    }
+  });
 }
 
 // ===== MAP =====
@@ -617,28 +747,80 @@ function initHourlyChart() {
 function initEUIChart() {
   const ctx = document.getElementById('eui-chart')?.getContext('2d');
   if (!ctx) return;
-  
-  const buildings = dashboardData.buildings?.top_consumers || generateTopBuildings();
-  
+
+  // Use actual building data from the map
+  let euiValues = [];
+
+  // Try to get real building data
+  if (window.buildingDataCache && window.buildingDataCache.buildings) {
+    euiValues = window.buildingDataCache.buildings.map(b => b.eui);
+  } else {
+    // Fallback to sample data if building data not loaded yet
+    const buildings = dashboardData.buildings?.top_consumers || generateTopBuildings();
+    euiValues = buildings.map(b => b.mean_eui || 25);
+  }
+
+  // Create EUI distribution bins
+  const bins = [
+    { label: '0-2.5', min: 0, max: 2.5, count: 0, color: 'rgba(0, 212, 255, 0.8)' },
+    { label: '2.5-5', min: 2.5, max: 5, count: 0, color: 'rgba(0, 255, 136, 0.8)' },
+    { label: '5-7.5', min: 5, max: 7.5, count: 0, color: 'rgba(100, 255, 100, 0.8)' },
+    { label: '7.5-10', min: 7.5, max: 10, count: 0, color: 'rgba(251, 191, 36, 0.8)' },
+    { label: '10-15', min: 10, max: 15, count: 0, color: 'rgba(255, 150, 50, 0.8)' },
+    { label: '15-25', min: 15, max: 25, count: 0, color: 'rgba(255, 107, 53, 0.8)' },
+    { label: '25+', min: 25, max: Infinity, count: 0, color: 'rgba(220, 38, 38, 0.8)' }
+  ];
+
+  // Count buildings in each bin
+  euiValues.forEach(eui => {
+    for (let bin of bins) {
+      if (eui >= bin.min && eui < bin.max) {
+        bin.count++;
+        break;
+      }
+    }
+  });
+
   euiChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: buildings.slice(0, 8).map(b => b.building_name.split(' ')[0]),
+      labels: bins.map(b => b.label),
       datasets: [{
-        label: 'EUI (kWh/sqft)',
-        data: buildings.slice(0, 8).map(b => b.mean_eui || 25),
-        backgroundColor: buildings.slice(0, 8).map(b => {
-          const eui = b.mean_eui || 25;
-          if (eui > 40) return 'rgba(255, 107, 53, 0.7)';
-          if (eui > 30) return 'rgba(251, 191, 36, 0.7)';
-          return 'rgba(0, 255, 136, 0.7)';
-        }),
-        borderRadius: 4
+        label: 'Number of Buildings',
+        data: bins.map(b => b.count),
+        backgroundColor: bins.map(b => b.color),
+        borderRadius: 6,
+        borderWidth: 0
       }]
     },
     options: {
-      ...getChartOptions('EUI (kWh/sqft/yr)', 'Building'),
-      indexAxis: 'y'
+      ...getChartOptions('Number of Buildings', 'EUI Range (kWh/sqft/yr)'),
+      plugins: {
+        ...getChartOptions('Number of Buildings', 'EUI Range (kWh/sqft/yr)').plugins,
+        tooltip: {
+          backgroundColor: 'rgba(17, 24, 32, 0.98)',
+          titleColor: '#00d4ff',
+          bodyColor: '#f0f4f8',
+          borderWidth: 2,
+          borderColor: 'rgba(0, 212, 255, 0.5)',
+          padding: 16,
+          callbacks: {
+            title: (context) => {
+              return `EUI: ${context[0].label} kWh/sqft/yr`;
+            },
+            label: (context) => {
+              const count = context.parsed.y;
+              const total = euiValues.length;
+              const percentage = ((count / total) * 100).toFixed(1);
+              return [
+                `Buildings: ${count}`,
+                `Percentage: ${percentage}% of campus`,
+                `Total Buildings: ${total}`
+              ];
+            }
+          }
+        }
+      }
     }
   });
 }
