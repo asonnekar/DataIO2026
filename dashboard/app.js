@@ -1396,6 +1396,9 @@ function updateInsights(peakReductionOverride = null) {
   const mlRangeEl = document.getElementById('insight-ml-range');
   const peakReductionEl = document.getElementById('insight-peak-reduction');
   const pilotCountEl = document.getElementById('insight-pilot-count');
+  const weatherShareEl = document.getElementById('insight-weather-share');
+  const topFeatureEl = document.getElementById('insight-top-feature');
+  const topFeatureValueEl = document.getElementById('insight-top-feature-value');
 
   if (scheduleRangeEl) {
     scheduleRangeEl.textContent = formatPercentRange(
@@ -1419,6 +1422,30 @@ function updateInsights(peakReductionOverride = null) {
   if (pilotCountEl) {
     const pilots = getPilotCandidates();
     pilotCountEl.textContent = `Top ${pilots.length}`;
+  }
+
+  if (weatherShareEl || topFeatureEl || topFeatureValueEl) {
+    const features = dashboardData?.models?.feature_importance || [];
+    if (features.length) {
+      const totalImportance = features.reduce((sum, f) => sum + (f.importance || 0), 0);
+      const weatherKeywords = ['temperature', 'apparent', 'cdd', 'hdd', 'humidity', 'cloud', 'dew', 'wind', 'precip'];
+      const weatherImportance = features.reduce((sum, f) => {
+        const name = (f.feature || '').toLowerCase();
+        const isWeather = weatherKeywords.some(keyword => name.includes(keyword));
+        return sum + (isWeather ? (f.importance || 0) : 0);
+      }, 0);
+      const topFeature = features.reduce((max, f) => (f.importance || 0) > (max.importance || 0) ? f : max, features[0]);
+
+      if (weatherShareEl) {
+        weatherShareEl.textContent = totalImportance > 0 ? formatPercent(weatherImportance / totalImportance) : '--';
+      }
+      if (topFeatureEl) {
+        topFeatureEl.textContent = formatFeatureLabel(topFeature.feature);
+      }
+      if (topFeatureValueEl) {
+        topFeatureValueEl.textContent = topFeature.importance !== undefined ? formatPercent(topFeature.importance) : '--';
+      }
+    }
   }
 }
 
@@ -1559,6 +1586,13 @@ function formatPercentRange(min, max) {
     return '--';
   }
   return `${(min * 100).toFixed(0)}-${(max * 100).toFixed(0)}%`;
+}
+
+function formatFeatureLabel(label) {
+  if (!label) return '--';
+  return label
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function normalizeTotalGwh(rawValue) {
