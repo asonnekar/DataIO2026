@@ -13,6 +13,7 @@ let monthlyChart = null;
 let hourlyChart = null;
 let weatherChart = null;
 let euiChart = null;
+let featureImportanceChart = null;
 let simulatorChart = null;
 let simulatorFocusBuildings = [];
 
@@ -1071,9 +1072,9 @@ function renderRetrofitList() {
 // ============================================================
 
 function renderFeatureImportance() {
-  const container = document.getElementById('feature-bars');
-  if (!container) return;
-  
+  const ctx = document.getElementById('feature-bars-chart')?.getContext('2d');
+  if (!ctx) return;
+
   const features = dashboardData.models?.feature_importance || [
     { feature: "Day of Week", importance: 0.095 },
     { feature: "Cooling Degree Days", importance: 0.093 },
@@ -1084,18 +1085,65 @@ function renderFeatureImportance() {
     { feature: "Cloud Cover", importance: 0.045 },
     { feature: "Humidity", importance: 0.042 }
   ];
-  
-  const maxImportance = Math.max(...features.map(f => f.importance));
-  
-  container.innerHTML = features.map(f => `
-    <div class="feature-bar-item">
-      <div class="feature-bar-label">${f.feature}</div>
-      <div class="feature-bar-track">
-        <div class="feature-bar-fill" style="width: ${(f.importance / maxImportance) * 100}%;"></div>
-      </div>
-      <div class="feature-bar-value">${(f.importance * 100).toFixed(1)}%</div>
-    </div>
-  `).join('');
+
+  const labels = features.map(f => f.feature);
+  const values = features.map(f => f.importance * 100);
+
+  const data = {
+    labels,
+    datasets: [{
+      label: 'Feature importance (%)',
+      data: values,
+      backgroundColor: 'rgba(0, 212, 255, 0.35)',
+      borderColor: 'rgba(0, 212, 255, 0.9)',
+      borderWidth: 1.5,
+      borderRadius: 6,
+      maxBarThickness: 36
+    }]
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(17, 24, 32, 0.95)',
+        borderColor: 'rgba(0, 212, 255, 0.3)',
+        borderWidth: 1,
+        titleColor: '#00d4ff',
+        bodyColor: '#f0f4f8',
+        callbacks: {
+          label: (context) => `${context.parsed.y.toFixed(1)}%`
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: '#8899a6',
+          font: { size: 10 }
+        },
+        grid: { display: false }
+      },
+      y: {
+        ticks: {
+          color: '#8899a6',
+          font: { size: 10 },
+          callback: (value) => `${value}%`
+        },
+        grid: { color: 'rgba(255, 255, 255, 0.05)' }
+      }
+    }
+  };
+
+  if (!featureImportanceChart) {
+    featureImportanceChart = new Chart(ctx, { type: 'bar', data, options });
+  } else {
+    featureImportanceChart.data = data;
+    featureImportanceChart.options = options;
+    featureImportanceChart.update();
+  }
 }
 
 // ============================================================
