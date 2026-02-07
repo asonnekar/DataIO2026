@@ -235,10 +235,30 @@ function initMap() {
     { name: "Scott Lab", lat: 40.0023, lng: -83.0168, energy: 3800000, eui: 31.2 }
   ];
   
+  // Calculate percentiles for better context
+  const allEnergies = sampleBuildings.map(b => b.energy);
+  const minEnergy = Math.min(...allEnergies);
+  const maxEnergy = Math.max(...allEnergies);
+  const avgEnergy = allEnergies.reduce((a, b) => a + b, 0) / allEnergies.length;
+
   sampleBuildings.forEach(b => {
     const intensity = Math.min(1, b.energy / 25000000);
     const color = getHeatColor(intensity);
-    
+    const percentile = ((b.energy - minEnergy) / (maxEnergy - minEnergy) * 100).toFixed(0);
+    const vsAvg = ((b.energy / avgEnergy - 1) * 100).toFixed(0);
+    const vsAvgSign = vsAvg >= 0 ? '+' : '';
+
+    // Categorize EUI
+    let euiCategory = 'Efficient';
+    let euiColor = '#00ff88';
+    if (b.eui > 40) {
+      euiCategory = 'High Consumption';
+      euiColor = '#ff6b35';
+    } else if (b.eui > 30) {
+      euiCategory = 'Moderate';
+      euiColor = '#fbbf24';
+    }
+
     L.circleMarker([b.lat, b.lng], {
       radius: 8 + intensity * 12,
       fillColor: color,
@@ -247,10 +267,23 @@ function initMap() {
       opacity: 0.9,
       fillOpacity: 0.75
     }).bindPopup(`
-      <div style="font-family: 'Space Mono', monospace;">
-        <strong style="color: #00d4ff;">${b.name}</strong><br>
-        <span style="color: #8899a6;">Energy:</span> ${formatNumber(b.energy / 1000)} MWh<br>
-        <span style="color: #8899a6;">EUI:</span> ${b.eui.toFixed(1)} kWh/sqft
+      <div style="font-family: 'Space Mono', monospace; min-width: 220px;">
+        <strong style="color: #00d4ff; font-size: 14px;">${b.name}</strong><br>
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,212,255,0.3);">
+          <div style="margin: 4px 0;">
+            <span style="color: #8899a6;">Annual Energy:</span><br>
+            <strong style="color: #fff; font-size: 16px;">${formatNumber(b.energy / 1000)} MWh</strong>
+          </div>
+          <div style="margin: 4px 0;">
+            <span style="color: #8899a6;">EUI:</span>
+            <strong style="color: ${euiColor};">${b.eui.toFixed(1)} kWh/sqft</strong>
+            <span style="color: #8899a6; font-size: 11px;"> (${euiCategory})</span>
+          </div>
+          <div style="margin: 4px 0; font-size: 11px; color: #8899a6;">
+            Usage Rank: ${percentile}th percentile<br>
+            vs Campus Avg: ${vsAvgSign}${vsAvg}%
+          </div>
+        </div>
       </div>
     `).addTo(map);
   });
@@ -389,9 +422,14 @@ function initWeatherScatter() {
 function initHourlyChart() {
   const ctx = document.getElementById('hourly-chart')?.getContext('2d');
   if (!ctx) return;
-  
+
   const hourlyData = dashboardData.time_patterns?.hourly_profile || generateHourlyProfile();
-  
+
+  // Calculate min/max for normalization (same as heatmap)
+  const values = hourlyData.map(d => d.avg_energy);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+
   hourlyChart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -400,13 +438,63 @@ function initHourlyChart() {
         label: 'Avg Energy (kWh)',
         data: hourlyData.map(d => d.avg_energy),
         backgroundColor: hourlyData.map(d => {
-          if (d.hour >= 9 && d.hour <= 17) return 'rgba(0, 212, 255, 0.7)';
-          return 'rgba(0, 212, 255, 0.3)';
+          // Normalize and use same color scale as heatmap
+          const normalized = (d.avg_energy - minVal) / (maxVal - minVal);
+          return getHeatmapColor(normalized);
         }),
         borderRadius: 4
       }]
     },
-    options: getChartOptions('kWh')
+    options: {
+      ...getChartOptions('kWh'),
+      plugins: {
+        ...getChartOptions('kWh').plugins,
+        tooltip: {
+          backgroundColor: 'rgba(17, 24, 32, 0.95)',
+          bodyColor: '#f0f4f8',
+          borderWidth: 2,
+          padding: 12,
+          callbacks: {
+            title: (context) => {
+              const hour = hourlyData[context[0].dataIndex].hour;
+              return `Hour: ${hour}:00 - ${hour + 1}:00`;
+            },
+            label: (context) => {
+              const value = context.parsed.y;
+              const normalized = (value - minVal) / (maxVal - minVal);
+              const percentile = (normalized * 100).toFixed(0);
+              return [
+                `Energy: ${formatNumber(value)} kWh`,
+                `Usage Level: ${percentile}th percentile`,
+                `vs Min: +${((value - minVal) / minVal * 100).toFixed(0)}%`,
+                `vs Max: ${((value / maxVal) * 100).toFixed(0)}%`
+              ];
+            },
+            beforeTitle: (context) => {
+              // Set title and border color to match bar color
+              const idx = context[0].dataIndex;
+              const value = hourlyData[idx].avg_energy;
+              const normalized = (value - minVal) / (maxVal - minVal);
+              const barColor = getHeatmapColor(normalized);
+
+              // Store color for use in titleColor and borderColor callbacks
+              context[0].chart.tooltip._barColor = barColor;
+            },
+            titleColor: (context) => {
+              return context.chart.tooltip._barColor || '#00d4ff';
+            }
+          },
+          // Dynamic border color
+          borderColor: (context) => {
+            const tooltip = context.chart.tooltip;
+            if (tooltip && tooltip._barColor) {
+              return tooltip._barColor;
+            }
+            return 'rgba(0, 212, 255, 0.3)';
+          }
+        }
+      }
+    }
   });
 }
 
@@ -444,17 +532,17 @@ function initEUIChart() {
 function initHeatmap() {
   const container = document.getElementById('heatmap-container');
   if (!container) return;
-  
+
   const heatmapData = dashboardData.time_patterns?.heatmap || generateHeatmapData();
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  
+
   const values = heatmapData.map(d => d.energy_kwh);
   const minVal = Math.min(...values);
   const maxVal = Math.max(...values);
-  
+
   let html = '<div class="heatmap-label"></div>';
   days.forEach(day => { html += `<div class="heatmap-label">${day}</div>`; });
-  
+
   for (let hour = 0; hour < 24; hour++) {
     html += `<div class="heatmap-label">${hour.toString().padStart(2, '0')}</div>`;
     for (let dow = 0; dow < 7; dow++) {
@@ -462,18 +550,138 @@ function initHeatmap() {
       const value = cell ? cell.energy_kwh : 0;
       const normalized = (value - minVal) / (maxVal - minVal);
       const color = getHeatmapColor(normalized);
-      html += `<div class="heatmap-cell" style="background: ${color}" 
-               title="${days[dow]} ${hour}:00 - ${formatNumber(value)} kWh"></div>`;
+      const percentile = (normalized * 100).toFixed(0);
+      const isPeak = value >= maxVal * 0.9;
+      const timeRange = `${hour}:00-${(hour + 1)}:00`;
+
+      html += `<div class="heatmap-cell"
+               style="background: ${color}"
+               data-day="${days[dow]}"
+               data-time="${timeRange}"
+               data-value="${value}"
+               data-percentile="${percentile}"
+               data-peak="${isPeak}"
+               data-min="${minVal}"
+               data-max="${maxVal}"></div>`;
     }
   }
-  
+
   container.innerHTML = html;
+
+  // Add custom tooltip
+  setupHeatmapTooltip();
+}
+
+function setupHeatmapTooltip() {
+  // Create tooltip element
+  let tooltip = document.getElementById('heatmap-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.id = 'heatmap-tooltip';
+    tooltip.style.cssText = `
+      position: fixed;
+      background: rgba(17, 24, 32, 0.98);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      color: #f0f4f8;
+      pointer-events: none;
+      z-index: 10000;
+      display: none;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      min-width: 200px;
+    `;
+    document.body.appendChild(tooltip);
+  }
+
+  const cells = document.querySelectorAll('.heatmap-cell');
+  cells.forEach(cell => {
+    cell.addEventListener('mouseenter', (e) => {
+      const day = cell.dataset.day;
+      const time = cell.dataset.time;
+      const value = parseFloat(cell.dataset.value);
+      const percentile = cell.dataset.percentile;
+      const minVal = parseFloat(cell.dataset.min);
+      const maxVal = parseFloat(cell.dataset.max);
+
+      // Get the cell's color
+      const cellColor = window.getComputedStyle(cell).backgroundColor;
+      const normalized = (value - minVal) / (maxVal - minVal);
+      const tileColor = getHeatmapColor(normalized);
+
+      const vsMin = ((value - minVal) / minVal * 100).toFixed(0);
+      const vsMax = ((value / maxVal) * 100).toFixed(0);
+
+      // Update tooltip border color to match tile
+      tooltip.style.borderColor = tileColor;
+
+      tooltip.innerHTML = `
+        <div style="color: ${tileColor}; font-weight: bold; margin-bottom: 8px;">${day} ${time}</div>
+        <div style="margin-bottom: 4px;">
+          <span style="color: #8899a6;">Energy:</span>
+          <strong style="color: #fff; margin-left: 8px;">${formatNumber(value)} kWh</strong>
+        </div>
+        <div style="margin-bottom: 4px;">
+          <span style="color: #8899a6;">Usage Level:</span>
+          <strong style="margin-left: 8px;">${percentile}th percentile</strong>
+        </div>
+        <div style="font-size: 10px; color: #8899a6; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1);">
+          vs Min: +${vsMin}% | vs Max: ${vsMax}%
+        </div>
+      `;
+
+      tooltip.style.display = 'block';
+      updateTooltipPosition(e);
+    });
+
+    cell.addEventListener('mousemove', updateTooltipPosition);
+
+    cell.addEventListener('mouseleave', () => {
+      tooltip.style.display = 'none';
+    });
+  });
+
+  function updateTooltipPosition(e) {
+    const tooltipRect = tooltip.getBoundingClientRect();
+    let x = e.clientX + 15;
+    let y = e.clientY + 15;
+
+    // Keep tooltip within viewport
+    if (x + tooltipRect.width > window.innerWidth) {
+      x = e.clientX - tooltipRect.width - 15;
+    }
+    if (y + tooltipRect.height > window.innerHeight) {
+      y = e.clientY - tooltipRect.height - 15;
+    }
+
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+  }
 }
 
 function getHeatmapColor(normalized) {
-  if (normalized < 0.33) return `hsl(200, ${50 + normalized * 50}%, ${18 + normalized * 20}%)`;
-  if (normalized < 0.66) return `hsl(${190 - (normalized - 0.33) * 20}, 100%, ${38 + normalized * 12}%)`;
-  return `hsl(${170 - (normalized - 0.66) * 150}, 100%, 50%)`;
+  // Use power scale to emphasize high values (red zones)
+  const emphasizedValue = Math.pow(normalized, 0.5); // Square root makes high values more prominent
+
+  // Blue (low) → Cyan → Yellow → Orange → Red (high)
+  if (emphasizedValue < 0.25) {
+    // Dark blue to cyan (low usage)
+    return `hsl(200, 100%, ${15 + emphasizedValue * 60}%)`;
+  } else if (emphasizedValue < 0.5) {
+    // Cyan to yellow-green (moderate usage)
+    const local = (emphasizedValue - 0.25) / 0.25;
+    return `hsl(${200 - local * 80}, 100%, 50%)`;
+  } else if (emphasizedValue < 0.75) {
+    // Yellow to orange (high usage)
+    const local = (emphasizedValue - 0.5) / 0.25;
+    return `hsl(${120 - local * 90}, 100%, 55%)`;
+  } else {
+    // Orange to red (peak usage - RED ZONES)
+    const local = (emphasizedValue - 0.75) / 0.25;
+    return `hsl(${30 - local * 30}, 100%, ${55 + local * 5}%)`;
+  }
 }
 
 // ============================================================

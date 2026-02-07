@@ -181,6 +181,17 @@ body::before {
     color: var(--accent-cyan);
 }
 
+.sidebar-team {
+    margin-top: var(--space-sm);
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.sidebar-team div {
+    padding: 2px 0;
+}
+
 /* ===== MAIN CONTENT ===== */
 .main-content {
     margin-left: var(--sidebar-width);
