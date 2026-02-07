@@ -44,22 +44,22 @@ async function loadDashboardData() {
 
 function setupNavigation() {
   const navItems = document.querySelectorAll('.nav-item');
-  
+
   navItems.forEach(item => {
     item.addEventListener('click', (e) => {
       e.preventDefault();
       const sectionId = item.dataset.section;
-      
+
       // Update nav state
       navItems.forEach(n => n.classList.remove('active'));
       item.classList.add('active');
-      
+
       // Update section visibility
       document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
       document.getElementById(sectionId).classList.add('active');
-      
+
       currentSection = sectionId;
-      
+
       // Reinitialize charts if needed
       if (sectionId === 'insights' && !weatherChart) {
         setTimeout(initWeatherScatter, 100);
@@ -75,12 +75,33 @@ function setupNavigation() {
       }
     });
   });
-  
+
   // Chart tabs
+  const colors = {
+    ELECTRICITY: '#fbbf24',
+    HEAT: '#ff6b35',
+    COOLING: '#00d4ff'
+  };
+
   document.querySelectorAll('.chart-tab').forEach(tab => {
+    // Set initial color for active tab
+    if (tab.classList.contains('active')) {
+      tab.style.backgroundColor = colors[tab.dataset.utility];
+      tab.style.color = '#0a0e14';
+    }
+
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.chart-tab').forEach(t => {
+        t.classList.remove('active');
+        t.style.backgroundColor = '';
+        t.style.color = '';
+      });
       tab.classList.add('active');
+
+      // Set color based on utility
+      tab.style.backgroundColor = colors[tab.dataset.utility];
+      tab.style.color = '#0a0e14';
+
       updateMonthlyChart(tab.dataset.utility);
     });
   });
@@ -189,12 +210,30 @@ function generateHourlyProfile() {
 
 function generateHeatmapData() {
   const data = [];
-  for (let dow = 0; dow < 7; dow++) {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  for (let day = 0; day < 7; day++) {
+    const isWeekend = day >= 5; // Saturday & Sunday
+
     for (let hour = 0; hour < 24; hour++) {
-      const baseEnergy = dow < 5 ? 3500 : 2200;
-      const hourMod = Math.sin((hour - 6) / 24 * Math.PI * 2) * 1500;
-      const peakMod = (dow < 5 && hour >= 9 && hour <= 17) ? 1000 : 0;
-      data.push({ day_of_week: dow, hour, energy_kwh: baseEnergy + hourMod + peakMod + Math.random() * 300 });
+      // Base energy varies by day type
+      let baseEnergy = isWeekend ? 2200 : 3500;
+
+      // Time of day pattern (sinusoidal with peak in afternoon)
+      const hourMod = Math.sin((hour - 6) / 24 * Math.PI * 2) * 1200;
+
+      // Weekday business hours peak (9am-5pm)
+      const peakMod = (!isWeekend && hour >= 9 && hour <= 17) ? 1200 : 0;
+
+      // Weekend has different pattern - lower overall, peaks around noon
+      const weekendMod = isWeekend && hour >= 10 && hour <= 16 ? 400 : 0;
+
+      data.push({
+        day_of_week: day,
+        day_name: days[day],
+        hour,
+        energy_kwh: baseEnergy + hourMod + peakMod + weekendMod + Math.random() * 300
+      });
     }
   }
   return data;
@@ -315,14 +354,14 @@ function initMonthlyChart() {
       datasets: [{
         label: 'Energy (MWh)',
         data: electricityData.map(d => d.energy_mwh),
-        borderColor: '#00d4ff',
-        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+        borderColor: '#fbbf24',
+        backgroundColor: 'rgba(251, 191, 36, 0.1)',
         borderWidth: 3,
         fill: true,
         tension: 0.4,
         pointRadius: 5,
         pointHoverRadius: 8,
-        pointBackgroundColor: '#00d4ff',
+        pointBackgroundColor: '#fbbf24',
         pointBorderColor: '#fff',
         pointBorderWidth: 2
       }]
@@ -333,16 +372,16 @@ function initMonthlyChart() {
 
 function updateMonthlyChart(utility) {
   if (!monthlyChart) return;
-  
+
   const monthlyData = dashboardData.campus_overview?.monthly_trends || generateMonthlyTrends();
   const filtered = monthlyData.filter(d => d.utility === utility);
-  
+
   const colors = {
-    ELECTRICITY: { border: '#00d4ff', bg: 'rgba(0, 212, 255, 0.1)' },
+    ELECTRICITY: { border: '#fbbf24', bg: 'rgba(251, 191, 36, 0.1)' },
     HEAT: { border: '#ff6b35', bg: 'rgba(255, 107, 53, 0.1)' },
-    COOLING: { border: '#00ff88', bg: 'rgba(0, 255, 136, 0.1)' }
+    COOLING: { border: '#00d4ff', bg: 'rgba(0, 212, 255, 0.1)' }
   };
-  
+
   monthlyChart.data.datasets[0].data = filtered.map(d => d.energy_mwh);
   monthlyChart.data.datasets[0].borderColor = colors[utility].border;
   monthlyChart.data.datasets[0].backgroundColor = colors[utility].bg;
@@ -540,27 +579,28 @@ function initHeatmap() {
   const minVal = Math.min(...values);
   const maxVal = Math.max(...values);
 
+  // Header row: empty corner + hours
   let html = '<div class="heatmap-label"></div>';
-  days.forEach(day => { html += `<div class="heatmap-label">${day}</div>`; });
-
   for (let hour = 0; hour < 24; hour++) {
     html += `<div class="heatmap-label">${hour.toString().padStart(2, '0')}</div>`;
-    for (let dow = 0; dow < 7; dow++) {
-      const cell = heatmapData.find(d => d.hour === hour && d.day_of_week === dow);
+  }
+
+  // Data rows: day label + cells
+  for (let day = 0; day < 7; day++) {
+    html += `<div class="heatmap-label">${days[day]}</div>`;
+    for (let hour = 0; hour < 24; hour++) {
+      const cell = heatmapData.find(d => d.hour === hour && d.day_of_week === day);
       const value = cell ? cell.energy_kwh : 0;
       const normalized = (value - minVal) / (maxVal - minVal);
       const color = getHeatmapColor(normalized);
       const percentile = (normalized * 100).toFixed(0);
-      const isPeak = value >= maxVal * 0.9;
-      const timeRange = `${hour}:00-${(hour + 1)}:00`;
 
       html += `<div class="heatmap-cell"
                style="background: ${color}"
-               data-day="${days[dow]}"
-               data-time="${timeRange}"
+               data-day="${days[day]}"
+               data-hour="${hour}"
                data-value="${value}"
                data-percentile="${percentile}"
-               data-peak="${isPeak}"
                data-min="${minVal}"
                data-max="${maxVal}"></div>`;
     }
@@ -600,16 +640,19 @@ function setupHeatmapTooltip() {
   cells.forEach(cell => {
     cell.addEventListener('mouseenter', (e) => {
       const day = cell.dataset.day;
-      const time = cell.dataset.time;
+      const hour = parseInt(cell.dataset.hour);
       const value = parseFloat(cell.dataset.value);
       const percentile = cell.dataset.percentile;
       const minVal = parseFloat(cell.dataset.min);
       const maxVal = parseFloat(cell.dataset.max);
 
       // Get the cell's color
-      const cellColor = window.getComputedStyle(cell).backgroundColor;
       const normalized = (value - minVal) / (maxVal - minVal);
       const tileColor = getHeatmapColor(normalized);
+
+      // Format as Day Hour:00
+      const hourStr = hour.toString().padStart(2, '0');
+      const dateStr = `${day} ${hourStr}:00`;
 
       const vsMin = ((value - minVal) / minVal * 100).toFixed(0);
       const vsMax = ((value / maxVal) * 100).toFixed(0);
@@ -618,7 +661,7 @@ function setupHeatmapTooltip() {
       tooltip.style.borderColor = tileColor;
 
       tooltip.innerHTML = `
-        <div style="color: ${tileColor}; font-weight: bold; margin-bottom: 8px;">${day} ${time}</div>
+        <div style="color: ${tileColor}; font-weight: bold; margin-bottom: 8px;">${dateStr}</div>
         <div style="margin-bottom: 4px;">
           <span style="color: #8899a6;">Energy:</span>
           <strong style="color: #fff; margin-left: 8px;">${formatNumber(value)} kWh</strong>
