@@ -25,6 +25,17 @@ document.addEventListener('DOMContentLoaded', () => {
   loadDashboardData();
   setupNavigation();
   setupSimulator();
+  
+  // Animate initial section on load
+  setTimeout(() => {
+    const initialSection = document.querySelector('.section.active');
+    if (initialSection) {
+      const cards = initialSection.querySelectorAll('.card');
+      cards.forEach((card, index) => {
+        card.style.animation = `cardStagger 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.1 + index * 0.1}s forwards`;
+      });
+    }
+  }, 300);
 });
 
 async function loadDashboardData() {
@@ -63,9 +74,28 @@ function setupNavigation() {
       navItems.forEach(n => n.classList.remove('active'));
       item.classList.add('active');
 
-      // Update section visibility
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      document.getElementById(sectionId).classList.add('active');
+      // Update section visibility with smooth transition
+      document.querySelectorAll('.section').forEach(s => {
+        s.classList.remove('active');
+        // Reset animation state
+        s.style.animation = 'none';
+        void s.offsetWidth; // Trigger reflow
+      });
+      
+      // Add active class with animation
+      const targetSection = document.getElementById(sectionId);
+      if (targetSection) {
+        setTimeout(() => {
+          targetSection.classList.add('active');
+          // Trigger card animations
+          const cards = targetSection.querySelectorAll('.card');
+          cards.forEach((card, index) => {
+            card.style.animation = 'none';
+            void card.offsetWidth;
+            card.style.animation = `cardStagger 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.1 + index * 0.1}s forwards`;
+          });
+        }, 50);
+      }
 
       currentSection = sectionId;
 
@@ -347,10 +377,7 @@ function initUtilityPieChart() {
           bodyColor: '#f0f4f8',
           borderWidth: 2,
           padding: 16,
-          displayColors: true,
-          boxWidth: 15,
-          boxHeight: 15,
-          usePointStyle: true,
+          displayColors: false,
           callbacks: {
             title: (context) => {
               return context[0].label;
@@ -589,7 +616,29 @@ function initMonthlyChart() {
         pointBorderWidth: 2
       }]
     },
-    options: getChartOptions('Energy (MWh)', 'Month')
+    options: {
+      ...getChartOptions('Energy (MWh)', 'Month'),
+      plugins: {
+        ...getChartOptions('Energy (MWh)', 'Month').plugins,
+        tooltip: {
+          ...getChartOptions('Energy (MWh)', 'Month').plugins.tooltip,
+          titleColor: '#ffffff',
+          callbacks: {
+            beforeTitle: (context) => {
+              const datasetColor = context[0].dataset.borderColor;
+              context[0].chart.tooltip._lineColor = datasetColor;
+            }
+          },
+          borderColor: (context) => {
+            const tooltip = context.chart.tooltip;
+            if (tooltip && tooltip._lineColor) {
+              return tooltip._lineColor;
+            }
+            return 'rgba(0, 212, 255, 0.3)';
+          }
+        }
+      }
+    }
   });
 }
 
@@ -657,10 +706,28 @@ function initWeatherScatter() {
         legend: { display: false },
         tooltip: {
           backgroundColor: 'rgba(17, 24, 32, 0.95)',
-          titleColor: '#00d4ff',
           bodyColor: '#f0f4f8',
+          borderWidth: 2,
+          displayColors: false,
           callbacks: {
-            label: ctx => `${ctx.parsed.x.toFixed(0)}°F → ${formatNumber(ctx.parsed.y)} kWh`
+            title: (context) => {
+              const temp = context[0].parsed.x;
+              const pointColor = context[0].element.options.backgroundColor;
+              // Store color for titleColor callback
+              context[0].chart.tooltip._pointColor = pointColor;
+              return `${temp.toFixed(0)}°F`;
+            },
+            titleColor: (context) => {
+              return context.chart.tooltip._pointColor || '#00d4ff';
+            },
+            label: ctx => `Energy: ${formatNumber(ctx.parsed.y)} kWh`
+          },
+          borderColor: (context) => {
+            const tooltip = context.chart.tooltip;
+            if (tooltip && tooltip._pointColor) {
+              return tooltip._pointColor;
+            }
+            return 'rgba(0, 212, 255, 0.5)';
           }
         }
       },
@@ -716,6 +783,7 @@ function initHourlyChart() {
           bodyColor: '#f0f4f8',
           borderWidth: 2,
           padding: 12,
+          displayColors: false,
           callbacks: {
             title: (context) => {
               const hour = hourlyData[context[0].dataIndex].hour;
@@ -764,7 +832,7 @@ function initHourlyChart() {
 function initEUIChart() {
   const ctx = document.getElementById('eui-chart')?.getContext('2d');
   if (!ctx) return;
-
+  
   // Use actual building data from the map
   let euiValues = [];
 
@@ -807,7 +875,7 @@ function initEUIChart() {
       }
     }
   });
-
+  
   euiChart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -826,14 +894,22 @@ function initEUIChart() {
         ...getChartOptions('Number of Buildings', 'EUI Range (kWh/sqft/yr)').plugins,
         tooltip: {
           backgroundColor: 'rgba(17, 24, 32, 0.98)',
-          titleColor: '#00d4ff',
           bodyColor: '#f0f4f8',
           borderWidth: 2,
-          borderColor: 'rgba(0, 212, 255, 0.5)',
           padding: 16,
+          displayColors: false,
           callbacks: {
+            beforeTitle: (context) => {
+              // Get the bar color for this bin
+              const idx = context[0].dataIndex;
+              const barColor = bins[idx].color;
+              context[0].chart.tooltip._barColor = barColor;
+            },
             title: (context) => {
               return `EUI: ${context[0].label} kWh/sqft/yr`;
+            },
+            titleColor: (context) => {
+              return context.chart.tooltip._barColor || '#00d4ff';
             },
             label: (context) => {
               const count = context.parsed.y;
@@ -845,6 +921,13 @@ function initEUIChart() {
                 `Total Buildings: ${total}`
               ];
             }
+          },
+          borderColor: (context) => {
+            const tooltip = context.chart.tooltip;
+            if (tooltip && tooltip._barColor) {
+              return tooltip._barColor;
+            }
+            return 'rgba(0, 212, 255, 0.5)';
           }
         }
       }
@@ -1074,7 +1157,7 @@ function renderRetrofitList() {
 function renderFeatureImportance() {
   const ctx = document.getElementById('feature-bars-chart')?.getContext('2d');
   if (!ctx) return;
-
+  
   const features = dashboardData.models?.feature_importance || [
     { feature: "Day of Week", importance: 0.095 },
     { feature: "Cooling Degree Days", importance: 0.093 },
@@ -1085,7 +1168,7 @@ function renderFeatureImportance() {
     { feature: "Cloud Cover", importance: 0.045 },
     { feature: "Humidity", importance: 0.042 }
   ];
-
+  
   const labels = features.map(f => f.feature);
   const values = features.map(f => f.importance * 100);
 
@@ -1109,12 +1192,26 @@ function renderFeatureImportance() {
       legend: { display: false },
       tooltip: {
         backgroundColor: 'rgba(17, 24, 32, 0.95)',
-        borderColor: 'rgba(0, 212, 255, 0.3)',
         borderWidth: 1,
         titleColor: '#00d4ff',
         bodyColor: '#f0f4f8',
+        displayColors: false,
         callbacks: {
+          beforeTitle: (context) => {
+            const barColor = context[0].dataset.borderColor;
+            context[0].chart.tooltip._barColor = barColor;
+          },
+          titleColor: (context) => {
+            return context.chart.tooltip._barColor || '#00d4ff';
+          },
           label: (context) => `${context.parsed.y.toFixed(1)}%`
+        },
+        borderColor: (context) => {
+          const tooltip = context.chart.tooltip;
+          if (tooltip && tooltip._barColor) {
+            return tooltip._barColor;
+          }
+          return 'rgba(0, 212, 255, 0.3)';
         }
       }
     },
@@ -1182,7 +1279,7 @@ function setupSimulator() {
       updateSimulation();
     });
   });
-
+  
   updateSimulation();
 }
 
@@ -1527,8 +1624,23 @@ function updateSimulatorChart(labels, baseline, optimized) {
         borderWidth: 1,
         titleColor: '#00d4ff',
         bodyColor: '#f0f4f8',
+        displayColors: false,
         callbacks: {
+          beforeTitle: (context) => {
+            const datasetColor = context[0].dataset.borderColor;
+            context[0].chart.tooltip._lineColor = datasetColor;
+          },
+          titleColor: (context) => {
+            return context.chart.tooltip._lineColor || '#00d4ff';
+          },
           label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} kWh`
+        },
+        borderColor: (context) => {
+          const tooltip = context.chart.tooltip;
+          if (tooltip && tooltip._lineColor) {
+            return tooltip._lineColor;
+          }
+          return 'rgba(0, 212, 255, 0.3)';
         }
       }
     },
@@ -1615,7 +1727,8 @@ function getChartOptions(yLabel, xLabel = null) {
         bodyColor: '#f0f4f8',
         borderColor: 'rgba(0, 212, 255, 0.3)',
         borderWidth: 1,
-        padding: 12
+        padding: 12,
+        displayColors: false
       }
     },
     scales: {
